@@ -61,3 +61,16 @@ class PyConvModelBinaryFixed(AbstractPyConvModel):
 
     def clamp_precision(self, x: np.ndarray) -> np.ndarray:
         return utils.signed_clamp(x, bits=24)
+
+
+@implements(proc=Conv, protocol=LoihiProtocol)
+@requires(CPU)
+@tag('graded')
+class PyConvModelGradedFixed(AbstractPyConvModel):
+    """Graded spike, and fixed point synapse implementation."""
+    s_in: PyInPort = LavaPyType(PyInPort.VEC_DENSE, np.int32, precision=24)
+    a_out: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.int32, precision=24)
+    weight: np.ndarray = LavaPyType(np.ndarray, np.int32, precision=8)
+
+    def clamp_precision(self, x: np.ndarray) -> np.ndarray:
+        return utils.signed_clamp(x, bits=24)

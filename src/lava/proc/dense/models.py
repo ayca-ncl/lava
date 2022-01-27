@@ -43,6 +43,76 @@ class PyDenseModelFloat(PyLoihiProcessModel):
 
 @implements(proc=Dense, protocol=LoihiProtocol)
 @requires(CPU)
+@tag('graded')
+class PyDenseModelBitAccGraded(PyLoihiProcessModel):
+    """Implementation of Conn Process with Dense synaptic connections that is
+    bit-accurate with Loihi's hardware implementation of Dense, which means,
+    it mimics Loihi behaviour bit-by-bit. Compatible with graded spikes.
+    """
+
+    s_in: PyInPort = LavaPyType(PyInPort.VEC_DENSE, np.int32, precision=16)
+    a_out: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.int32, precision=16)
+    a_buff: np.ndarray = LavaPyType(np.ndarray, np.int32, precision=16)
+    # weights is a 2D matrix of form (num_flat_output_neurons,
+    # num_flat_input_neurons) in C-order (row major).
+    weights: np.ndarray = LavaPyType(np.ndarray, np.int32, precision=8)
+    weight_exp: np.ndarray = LavaPyType(np.ndarray, np.int32, precision=4)
+    num_weight_bits: np.ndarray = LavaPyType(np.ndarray, np.int32, precision=3)
+    sign_mode: np.ndarray = LavaPyType(np.ndarray, np.int32, precision=2)
+
+    def __init__(self):
+        super(PyDenseModelBitAccGraded, self).__init__()
+        # Flag to determine whether weights have already been scaled.
+        self.weights_set = False
+
+    def _set_wgts(self):
+        wgt_vals = np.copy(self.weights)
+
+        # Saturate the weights according to the sign_mode:
+        # 0 : null
+        # 1 : mixed
+        # 2 : excitatory
+        # 3 : inhibitory
+        mixed_idx = np.equal(self.sign_mode, 1).astype(np.int32)
+        excitatory_idx = np.equal(self.sign_mode, 2).astype(np.int32)
+        inhibitory_idx = np.equal(self.sign_mode, 3).astype(np.int32)
+
+        min_wgt = -2 ** 8 * (mixed_idx + inhibitory_idx)
+        max_wgt = (2 ** 8 - 1) * (mixed_idx + excitatory_idx)
+
+        saturated_wgts = np.clip(wgt_vals, min_wgt, max_wgt)
+
+        # Truncate least significant bits given sign_mode and num_wgt_bits.
+        num_truncate_bits = 8 - self.num_weight_bits + mixed_idx
+
+        truncated_wgts = np.left_shift(
+            np.right_shift(saturated_wgts, num_truncate_bits),
+            num_truncate_bits)
+
+        wgt_vals = truncated_wgts.astype(np.int32)
+        wgts_scaled = np.copy(wgt_vals)
+        self.weights_set = True
+        return wgts_scaled
+
+    def run_spk(self):
+        # Since this Process has no learning, weights are assumed to be static
+        # and only require scaling on the first timestep of run_spk().
+        if not self.weights_set:
+            self.weights = self._set_wgts()
+        # The a_out sent on a each timestep is a buffered value from dendritic
+        # accumulation at timestep t-1. This prevents deadlocking in
+        # networks with recurrent connectivity structures.
+        self.a_out.send(self.a_buff)
+        s_in = self.s_in.recv()
+        a_accum = self.weights.dot(s_in)
+        self.a_buff = np.left_shift(a_accum,
+                                    self.weight_exp) if self.weight_exp > 0 \
+            else np.right_shift(a_accum, -self.weight_exp)
+
+
+
+@implements(proc=Dense, protocol=LoihiProtocol)
+@requires(CPU)
 @tag('bit_accurate_loihi', 'fixed_pt')
 class PyDenseModelBitAcc(PyLoihiProcessModel):
     """Implementation of Conn Process with Dense synaptic connections that is
