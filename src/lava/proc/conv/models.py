@@ -21,9 +21,9 @@ class AbstractPyConvModel(PyLoihiProcessModel):
     a_out = None
     weight = None
 
-    kernel_size: np.ndarray = LavaPyType(np.ndarray, np.int8, precision=8)
+    kernel_size: np.ndarray = LavaPyType(np.ndarray, np.int16, precision=16)
     stride: np.ndarray = LavaPyType(np.ndarray, np.int8, precision=8)
-    padding: np.ndarray = LavaPyType(np.ndarray, np.int8, precision=8)
+    padding: np.ndarray = LavaPyType(np.ndarray, np.int16, precision=16)
     dilation: np.ndarray = LavaPyType(np.ndarray, np.int8, precision=8)
     groups: np.ndarray = LavaPyType(np.ndarray, np.int8, precision=8)
 
@@ -70,7 +70,7 @@ class PyConvModelGradedFixed(AbstractPyConvModel):
     """Graded spike, and fixed point synapse implementation."""
     s_in: PyInPort = LavaPyType(PyInPort.VEC_DENSE, np.int32, precision=24)
     a_out: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.int32, precision=24)
-    weight: np.ndarray = LavaPyType(np.ndarray, np.int32, precision=8)
+    weight: np.ndarray = LavaPyType(np.ndarray, np.int32, precision=24)
 
     def clamp_precision(self, x: np.ndarray) -> np.ndarray:
         return utils.signed_clamp(x, bits=24)
